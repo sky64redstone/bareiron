@@ -1886,9 +1886,22 @@ void handleServerTick (int64_t time_since_last_tick) {
     for (int j = 0; j < MAX_MOBS; j ++) {
       if (j == i) continue;
       if (mob_data[j].type == 0) continue;
+      #ifdef SMOOTHER_MOB_MOVEMENT
+        short x =
+          mob_data[j].x +
+          (mob_data[j].next_pos & 1) -
+          ((mob_data[j].next_pos >> 1) & 1);
+        short z =
+          mob_data[j].z +
+          ((mob_data[j].next_pos >> 4) & 1) -
+          ((mob_data[j].next_pos >> 5) & 1);
+      #else
+        short x = mob_data[j].x;
+        short z = mob_data[j].z;
+      #endif
       if (
-        mob_data[j].x == new_x &&
-        mob_data[j].z == new_z &&
+        x == new_x &&
+        z == new_z &&
         abs((int)mob_data[j].y - (int)new_y) < 2
       ) {
         colliding = true;
@@ -1902,6 +1915,28 @@ void handleServerTick (int64_t time_since_last_tick) {
       (block_above >= B_lava && block_above < B_lava + 4)
     ) hurtEntity(entity_id, -1, D_lava, 8);
 
+    #ifdef SMOOTHER_MOB_MOVEMENT
+      int dx = new_x - mob_data[i].x;
+      int dy = new_y - mob_data[i].y;
+      int dz = new_z - mob_data[i].z;
+      mob_data[i].next_pos = 0x00;
+      if (dx > 0) {
+        mob_data[i].next_pos |= 0x01;
+      } else if (dx < 0) {
+        mob_data[i].next_pos |= 0x02;
+      }
+      if (dy > 0) {
+        mob_data[i].next_pos |= 0x04;
+      } else if (dy < 0) {
+        mob_data[i].next_pos |= 0x08;
+      }
+      if (dz > 0) {
+        mob_data[i].next_pos |= 0x10;
+      } else if (dz < 0) {
+        mob_data[i].next_pos |= 0x20;
+      }
+    #endif
+
     // Store new mob position
     mob_data[i].x = new_x;
     mob_data[i].y = new_y;
@@ -1910,20 +1945,87 @@ void handleServerTick (int64_t time_since_last_tick) {
     // Vary the yaw angle to look just a little less robotic
     yaw += ((r >> 7) & 31) - 16;
 
-    // Broadcast relevant entity movement packets
-    for (int j = 0; j < MAX_PLAYERS; j ++) {
-      if (player_data[j].client_fd == -1) continue;
-      sc_teleportEntity (
-        player_data[j].client_fd, entity_id,
-        (double)new_x + 0.5, new_y, (double)new_z + 0.5,
-        yaw * 360 / 256, 0
-      );
-      sc_setHeadRotation(player_data[j].client_fd, entity_id, yaw);
-    }
+    #ifdef SMOOTHER_MOB_MOVEMENT
+      // Broadcast relevant entity movement packets
+      broadcastMobInterpolation(0, entity_id, i);
+    #else
+      // Broadcast relevant entity movement packets
+      for (int j = 0; j < MAX_PLAYERS; j ++) {
+        if (player_data[j].client_fd == -1) continue;
+        sc_teleportEntity (
+          player_data[j].client_fd, entity_id,
+          (double)new_x + 0.5, new_y, (double)new_z + 0.5,
+          yaw * 360 / 256, 0
+        );
+        sc_setHeadRotation(player_data[j].client_fd, entity_id, yaw);
+      }
+    #endif
 
   }
 
 }
+
+#ifdef SMOOTHER_MOB_MOVEMENT
+void broadcastMobInterpolation(int step, int id, int idx) {
+  if (mob_data[idx].next_pos & 0x40) {
+    return; // mob is currently not moving
+  }
+
+  int x = ((mob_data[idx].next_pos >> 1) & 1) - (mob_data[idx].next_pos & 1);
+  int y = ((mob_data[idx].next_pos >> 3) & 1) - ((mob_data[idx].next_pos >> 2) & 1);
+  int z = ((mob_data[idx].next_pos >> 5) & 1) - ((mob_data[idx].next_pos >> 4) & 1);
+
+  if (x == 0 && y == 0 && z == 0) {
+    return;
+  }
+
+  // Interpolate between the positions
+  double t = (1.0 / (double)SMOOTHER_MOB_MOVEMENT) * (double)(SMOOTHER_MOB_MOVEMENT - step);
+
+  double dx = t * (double)x;
+  double dy = t * (double)y;
+  double dz = t * (double)z;
+
+  printf("bMI: step:%i, t:%0.1f, dx:%0.1f, dy:%0.1f, dz:%0.1f\n", step, t, dx, dy, dz);
+
+  static const int table[3][3] = {
+    {160, 128,  96},
+    {192,   0,  64},
+    {224,   0,  32}
+  };
+
+  uint8_t yaw = table[-z + 1][x + 1];
+
+  // Broadcast relevant entity movement packets
+  for (int j = 0; j < MAX_PLAYERS; j ++) {
+    if (player_data[j].client_fd == -1) continue;
+    sc_teleportEntity (
+      player_data[j].client_fd, id,
+      (double)mob_data[idx].x + 0.5 + dx,
+      mob_data[idx].y + dy,
+      (double)mob_data[idx].z + 0.5 + dz,
+      yaw * 360 / 256, 0
+    );
+    sc_setHeadRotation(player_data[j].client_fd, id, yaw);
+  }
+
+  if (step == SMOOTHER_MOB_MOVEMENT) {
+    mob_data[idx].next_pos |= 0x40;
+  }
+}
+
+// Simulates smooth mob movement with interpolation
+// Takes the time since the last tick in microseconds as the only argument
+void handleMobUpdate(int step) {
+  for (int j = 0; j < MAX_MOBS; j++) {
+    if (mob_data[j].type == 0) continue;
+
+    int id = -2 + j;
+
+    broadcastMobInterpolation(step, id, j);
+  }
+}
+#endif
 
 #ifdef ALLOW_CHESTS
 // Broadcasts a chest slot update to all clients who have that chest open,

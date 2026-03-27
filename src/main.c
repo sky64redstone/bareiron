@@ -585,6 +585,10 @@ int main () {
 
   // Track time of last server tick (in microseconds)
   int64_t last_tick_time = get_program_time();
+  #ifdef SMOOTHER_MOB_MOVEMENT
+    int64_t last_mob_update = last_tick_time;
+    int mob_update_step = 0;
+  #endif
 
   /**
    * Cycles through all connected clients, handling one packet at a time
@@ -620,11 +624,24 @@ int main () {
     if (clients[client_index] == -1) continue;
 
     // Handle periodic events (server ticks)
-    int64_t time_since_last_tick = get_program_time() - last_tick_time;
+    int64_t now = get_program_time();
+    int64_t time_since_last_tick = now - last_tick_time;
     if (time_since_last_tick > TIME_BETWEEN_TICKS) {
       handleServerTick(time_since_last_tick);
       last_tick_time = get_program_time();
+      last_mob_update = last_tick_time;
     }
+
+    #ifdef SMOOTHER_MOB_MOVEMENT
+      int64_t time_since_last_mob_update = now - last_mob_update;
+      if (time_since_last_mob_update > TIME_BETWEEN_MOB_UPDATES) {
+        if (++mob_update_step > SMOOTHER_MOB_MOVEMENT) {
+          mob_update_step = 0;
+        }
+        handleMobUpdate(mob_update_step);
+        last_mob_update = get_program_time();
+      }
+    #endif
 
     // Handle this individual client
     int client_fd = clients[client_index];

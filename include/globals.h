@@ -162,6 +162,12 @@
 // Doesn't implement authentication, hence disabled by default.
 // #define DEV_ENABLE_BEEF_DUMPS
 
+// If defined, mobs use interpolation to get smoother movement.
+// The value determines how many movements updates the server should send to the clients
+// per second.
+#define SMOOTHER_MOB_MOVEMENT 5
+#define TIME_BETWEEN_MOB_UPDATES (1000000 / (SMOOTHER_MOB_MOVEMENT))
+
 #define STATE_NONE 0
 #define STATE_STATUS 1
 #define STATE_LOGIN 2
@@ -248,6 +254,11 @@ typedef struct {
   // Middle 1 bit: sheep sheared, unused for other mobs
   // Upper 2 bits: panic timer
   uint8_t data;
+  #ifdef SMOOTHER_MOB_MOVEMENT
+    // encoding: 00=0, 01=+1, 10=-1, 11=0
+    // 0FZZYYXX (F is set when the entity doesn't move)
+    uint8_t next_pos;
+  #endif
 } MobData;
 
 #pragma pack(pop)
