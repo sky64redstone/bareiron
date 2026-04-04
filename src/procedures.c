@@ -1947,7 +1947,7 @@ void handleServerTick (int64_t time_since_last_tick) {
 
     #ifdef SMOOTHER_MOB_MOVEMENT
       // Broadcast relevant entity movement packets
-      broadcastMobInterpolation(0, entity_id, i);
+      broadcastMobInterpolation(0, entity_id, i, yaw);
     #else
       // Broadcast relevant entity movement packets
       for (int j = 0; j < MAX_PLAYERS; j ++) {
@@ -1966,27 +1966,29 @@ void handleServerTick (int64_t time_since_last_tick) {
 }
 
 #ifdef SMOOTHER_MOB_MOVEMENT
-void broadcastMobInterpolation(int step, int id, int idx) {
+// yaw: optional mob head rotation.
+// if yaw == 255 then the right yaw is computed based on the current walking direction
+void broadcastMobInterpolation(int step, int id, int idx, uint8_t yaw) {
   if (mob_data[idx].next_pos & 0x40) {
     return; // mob is currently not moving
   }
 
-  int x = ((mob_data[idx].next_pos >> 1) & 1) - (mob_data[idx].next_pos & 1);
-  int y = ((mob_data[idx].next_pos >> 3) & 1) - ((mob_data[idx].next_pos >> 2) & 1);
-  int z = ((mob_data[idx].next_pos >> 5) & 1) - ((mob_data[idx].next_pos >> 4) & 1);
+  short x = ((mob_data[idx].next_pos >> 1) & 1) - (mob_data[idx].next_pos & 1);
+  short y = ((mob_data[idx].next_pos >> 3) & 1) - ((mob_data[idx].next_pos >> 2) & 1);
+  short z = ((mob_data[idx].next_pos >> 5) & 1) - ((mob_data[idx].next_pos >> 4) & 1);
 
   if (x == 0 && y == 0 && z == 0) {
     return;
   }
 
   // Interpolate between the positions
-  double t = (1.0 / (double)SMOOTHER_MOB_MOVEMENT) * (double)(SMOOTHER_MOB_MOVEMENT - step);
+  float t = (1.0f / (float)SMOOTHER_MOB_MOVEMENT) * (float)(SMOOTHER_MOB_MOVEMENT - step);
 
-  double dx = t * (double)x;
-  double dy = t * (double)y;
-  double dz = t * (double)z;
+  float dx = t * (float)x;
+  float dy = t * (float)y;
+  float dz = t * (float)z;
 
-  printf("bMI: step:%i, t:%0.1f, dx:%0.1f, dy:%0.1f, dz:%0.1f\n", step, t, dx, dy, dz);
+  //printf("bMI: step:%i, t:%0.1f, dx:%0.1f, dy:%0.1f, dz:%0.1f\n", step, t, dx, dy, dz);
 
   static const int table[3][3] = {
     {160, 128,  96},
@@ -1994,7 +1996,9 @@ void broadcastMobInterpolation(int step, int id, int idx) {
     {224,   0,  32}
   };
 
-  uint8_t yaw = table[-z + 1][x + 1];
+  if (yaw == 255) {
+    yaw = table[-z + 1][x + 1];
+  }
 
   // Broadcast relevant entity movement packets
   for (int j = 0; j < MAX_PLAYERS; j ++) {
@@ -2022,7 +2026,7 @@ void handleMobUpdate(int step) {
 
     int id = -2 + j;
 
-    broadcastMobInterpolation(step, id, j);
+    broadcastMobInterpolation(step, id, j, 255);
   }
 }
 #endif

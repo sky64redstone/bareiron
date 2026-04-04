@@ -166,7 +166,10 @@
 // The value determines how many movements updates the server should send to the clients
 // per second.
 #define SMOOTHER_MOB_MOVEMENT 5
-#define TIME_BETWEEN_MOB_UPDATES (1000000 / (SMOOTHER_MOB_MOVEMENT))
+
+#ifdef SMOOTHER_MOB_MOVEMENT
+  #define TIME_BETWEEN_MOB_UPDATES (1000000 / (SMOOTHER_MOB_MOVEMENT))
+#endif
 
 #define STATE_NONE 0
 #define STATE_STATUS 1
