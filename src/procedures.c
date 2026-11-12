@@ -1988,8 +1988,6 @@ void broadcastMobInterpolation(int step, int id, int idx, uint8_t yaw) {
   float dy = t * (float)y;
   float dz = t * (float)z;
 
-  //printf("bMI: step:%i, t:%0.1f, dx:%0.1f, dy:%0.1f, dz:%0.1f\n", step, t, dx, dy, dz);
-
   static const int table[3][3] = {
     {160, 128,  96},
     {192,   0,  64},

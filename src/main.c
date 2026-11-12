@@ -629,17 +629,21 @@ int main () {
     if (time_since_last_tick > TIME_BETWEEN_TICKS) {
       handleServerTick(time_since_last_tick);
       last_tick_time = get_program_time();
-      last_mob_update = last_tick_time;
+      #ifdef SMOOTHER_MOB_MOVEMENT
+        last_mob_update = last_tick_time;
+        mob_update_step = 0;
+      #endif
     }
 
     #ifdef SMOOTHER_MOB_MOVEMENT
       int64_t time_since_last_mob_update = now - last_mob_update;
-      if (time_since_last_mob_update > TIME_BETWEEN_MOB_UPDATES) {
-        if (++mob_update_step > SMOOTHER_MOB_MOVEMENT) {
-          mob_update_step = 0;
-        }
+      if (
+        time_since_last_mob_update > TIME_BETWEEN_MOB_UPDATES &&
+        mob_update_step <= SMOOTHER_MOB_MOVEMENT
+      ) {
         handleMobUpdate(mob_update_step);
         last_mob_update = get_program_time();
+        mob_update_step++;
       }
     #endif
 
@@ -733,7 +737,7 @@ int main () {
       disconnectClient(&clients[client_index], 4);
       continue;
     }
-
+    
   }
 
   close(server_fd);
